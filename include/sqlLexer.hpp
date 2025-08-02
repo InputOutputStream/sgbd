@@ -1,54 +1,62 @@
 #ifndef SQL_LEXER_H
 #define SQL_LEXER_H
 
-
 #include "definitions.hpp"
 #include <string>
 #include <vector>
-#include <iostream>
-#include <string>
 #include <memory>
+#include <unordered_set>
 
-typedef struct TOKEN_STRUCT
-{
-    enum{
-         TOKEN_ID,
-         TOKEN_EQUALS,
-         TOKEN_STRING,
-         TOKEN_SEMI,
-         TOKEN_COMMA,
-         TOKEN_LPAREN,
-         TOKEN_RPAREN,
-         TOKEN_LBRACE,
-         TOKEN_RBRACE,
-         TOKEN_LSBRACE,
-         TOKEN_RSBRACE,
-         TOKEN_EOF,
-    }type;
-    
-    char *value;
-
-}Token;
-
-
-class Lexer{
-
-    std::string content;
-    char *caratcers;
-    int lenght;
-
-    public:
-        Lexer(std::string &content);
-        void lexer_advance();
-        void lexer_skip_caracter(char c);
-        std:: unique_ptr<Token> lexer_get_next_token();
-        std:: unique_ptr<Token> lexer_collect_string();
-        std:: unique_ptr<Token> lexer_collect_id();
-
-
-    private:
-        std:: unique_ptr<Token> _lexer_advance_with_token(Token &token);
-
+enum class TokenType {
+    ID,
+    EQUALS,
+    STRING,
+    SEMI,
+    COMMA,
+    LPAREN,
+    RPAREN,
+    LBRACE,
+    NUMBER,
+    RBRACE,
+    LSBRACE,
+    RSBRACE,
+    END_FILE
 };
 
-#endif // !SQL_LEXER_H
+struct Token {
+    TokenType type;
+    std::string value; 
+    
+    Token(TokenType t, std::string v = "") : type(t), value(std::move(v)) {}
+};
+
+class Lexer {
+    private:
+        std::string content;
+        std::unordered_set<char> special_chars;  
+        size_t position = 0;  
+        char current_char = '\0';
+        
+        // Private helper methods
+        std::unique_ptr<Token> advance_with_token(TokenType type, std::string value = "");
+        void advance();
+        void skip_whitespace();
+        char peek_next() const;
+    
+    public:
+        // Constructors
+        Lexer() = default;
+        explicit Lexer(const std::string& content);
+        
+        std::unique_ptr<Token> get_next_token();
+        bool is_at_end() const;
+        
+        static std::string read_file(const std::string& path);  // Return string, take const ref
+        
+    private:
+        std::unique_ptr<Token> collect_string();
+        std::unique_ptr<Token> collect_id();
+        std::unique_ptr<Token> collect_number();  // Common in SQL
+};
+
+#endif // SQL_LEXER_H
