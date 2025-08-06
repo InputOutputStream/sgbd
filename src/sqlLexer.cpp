@@ -1,4 +1,4 @@
-#include "sqlLexer.hpp"
+#include "../include/sqlLexer.hpp"
 #include <memory>
 #include <vector>
 #include <iostream>
@@ -18,7 +18,7 @@ Lexer::Lexer(const std::string& content) : content(content), position(0) {
     current_char = content[0];
     
     // Initialize special characters for lexing
-    special_chars = {'=', ';', ',', '(', ')', '{', '}', '[', ']', '"'};
+    special_chars = {'=', ';', ',','\'' , '(', ')', '{', '}', '[', ']', '"'};
 }
 
 std::string Lexer::read_file(const std::string &path) {
@@ -82,6 +82,8 @@ std::unique_ptr<Token> Lexer::get_next_token() {
                 return advance_with_token(TokenType::EQUALS, "=");
             case ',':
                 return advance_with_token(TokenType::COMMA, ",");
+            case '\'':
+                return advance_with_token(TokenType::QUOTE, "'");
             case ';':
                 return advance_with_token(TokenType::SEMI, ";");
             case '(':

@@ -1,68 +1,60 @@
 #ifndef SQL_PARSER_H
+#define SQL_PARSER_H
 
 #include <vector>
 #include <iostream>
 #include <string>
 #include <memory>
 
-class ASTNode {
-    public:
-        virtual ~ASTNode () = default;
-        virtual void accept(ASTVisitor& visitor) = 0;
-        virtual std:: string to_string () const = 0;
+#include "sqlLexer.hpp"    
+#include "clause.hpp"
+#include "ast.hpp"
+#include "statement.hpp"
+
+
+// AST Node types
+enum class ExpressionType {
+    LITERAL,
+    COLUMN_REFERENCE,
+    BINARY_OP,
+    PARENTHESIZED
 };
 
-
-class SelectStatement : public ASTNode {
-
-    std::vector <std:: unique_ptr <Expression >> select_list;
-    std::unique_ptr <FromClause > from_clause;
-
-    std::unique_ptr <WhereClause > where_clause;
-
-    std::unique_ptr <OrderByClause > order_by_clause;
-
-    std::unique_ptr <LimitClause > limit_clause;
-
- 
-
-    public:
-        SelectStatement () = default;
-
-        void set_select_list(std::vector <std:: unique_ptr <Expression >> list)
-        {
-            select_list = std::move(list);
-        }
-        
-        void set_from_clause(std:: unique_ptr <FromClause > clause) {
-             from_clause = std::move(clause);
-        }
-
-        void accept(ASTVisitor& visitor) override {
-            visitor.visit(*this);
-        }  
-        std:: string to_string () const override;
-};
-
-
-
-class SQLParser {
-    std::vector <Token > tokens;
-    size_t current_token;
-
-    public:
-        std:: unique_ptr <ASTNode > parse(const std:: string& sql);
-        std:: unique_ptr <SelectStatement > parse_select_statement ();
-        std:: unique_ptr <Expression > parse_expression ();
-        std:: unique_ptr <WhereClause > parse_where_clause ();
-
+struct Expression {
+    ExpressionType type;
+    std::string value;
+    std::shared_ptr<Expression> left;
+    std::shared_ptr<Expression> right;
     
+    Expression(ExpressionType t, std::string v = "") 
+        : type(t), value(std::move(v)), left(nullptr), right(nullptr) {}
+};
+
+
+class Parser {
+    Lexer& lexer;
+    std::unique_ptr<Token> current_token;
+    std::unique_ptr<Token> last_token;
+
     private:
-        Token peek() const;
-        Token consume ();
+        void advance();
         bool match(TokenType type);
         void expect(TokenType type);
+        TokenType expected();
+    
+    public:
+        Parser(Lexer& lex) : lexer(lex) {
+            advance();
+        }
+        std::unique_ptr<Statement> parse_statement();
+        std::unique_ptr<Statement> parse_statements();
+        std::unique_ptr<Clause> parse_clause();  
+        std::unique_ptr<Expression> parse_expression() ;
+        std::unique_ptr<Expression> parse_value_expression() ;
+        std::unique_ptr<Expression> parse_binary_expression();
 };
+
+
 
 
 #endif // !SQL_PARSER_H
