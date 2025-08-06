@@ -38,9 +38,23 @@ class Clause: public ASTNode{
 */
 struct SelectClause : Clause{
 
-};
+    std::vector<std::string> columns;
+    
+    SelectClause() : Clause(ClauseType::SELECT) {}
 
- 
+    void add_column(const std::string& col) {
+        columns.push_back(col);
+    }
+    
+    std::string to_string() const override {
+        std::string result = "SELECT ";
+        for (size_t i = 0; i < columns.size(); ++i) {
+            if (i > 0) result += ", ";
+            result += columns[i];
+        }
+        return result;
+    }
+};
 
 
 
@@ -49,6 +63,22 @@ struct SelectClause : Clause{
  */
 struct GroupClause : Clause {
 
+    std::vector<std::string> reference_list;
+    
+    GroupClause() : Clause(ClauseType::GROUP_BY) {}
+
+    void add_reference(const std::string& col) {
+        reference_list.push_back(col);
+    }
+    
+    std::string to_string() const override {
+        std::string result = "GROUP BY ";
+        for (size_t i = 0; i < reference_list.size(); ++i) {  
+            if (i > 0) result += ", ";
+            result += reference_list[i];  
+        }
+        return result;
+    }
 };
 
 

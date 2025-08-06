@@ -20,6 +20,7 @@ enum class TokenType {
     RBRACE,
     LSBRACE,
     RSBRACE,
+    STAR,
     QUOTE,
     END_FILE
 };

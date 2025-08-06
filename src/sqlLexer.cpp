@@ -82,6 +82,8 @@ std::unique_ptr<Token> Lexer::get_next_token() {
                 return advance_with_token(TokenType::EQUALS, "=");
             case ',':
                 return advance_with_token(TokenType::COMMA, ",");
+            case '*':
+                return advance_with_token(TokenType::STAR, "*");
             case '\'':
                 return advance_with_token(TokenType::QUOTE, "'");
             case ';':

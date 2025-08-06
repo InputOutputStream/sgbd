@@ -49,7 +49,7 @@ std::unique_ptr<Statement> Parser::parse_statement() {
     }
     
     statement->set_type(it->second);
-    advance(); // consume keyword
+    statement->add_clause(std::move(parse_select_clause()));
     
     // Parse clauses until semicolon
     while (!match(TokenType::SEMI) && !match(TokenType::END_FILE)) {
@@ -82,6 +82,36 @@ std::unique_ptr<Clause> Parser::parse_clause() {
     
     advance(); // skip unknown clause
     return nullptr;
+}
+
+
+
+std::unique_ptr<Clause> Parser::parse_select_clause(){
+    advance(); // consume select
+    
+    auto select_clause = std::make_unique<SelectClause>();
+    
+    if (match(TokenType::STAR)) { 
+        select_clause->add_column("*");
+        advance();
+        return std::move(select_clause);
+    }
+
+    do {
+        if (match(TokenType::ID)) {
+            std::string column = current_token->value;
+            advance();
+            select_clause->add_column(column);
+        }
+        
+        if (match(TokenType::COMMA)) {
+            advance();
+        } else {
+            break;
+        }
+    } while (true);
+    
+    return std::move(select_clause);
 }
 
 
@@ -164,6 +194,30 @@ std::unique_ptr<Clause> Parser::parse_orderBY_clause() {
 }
 
 
+std::unique_ptr<Clause> Parser::parse_group_clause(){
+    advance(); // consume GROUP
+    if (match(TokenType::ID) && toupper(current_token->value) == "BY") {
+        advance(); // consume BY
+    }
+    
+    auto group_clause = std::make_unique<GroupClause>();
+    
+    do {
+        if (match(TokenType::ID)) {
+            std::string column = current_token->value;
+            advance();
+            group_clause->add_reference(column);
+        }
+        
+        if (match(TokenType::COMMA)) {
+            advance();
+        } else {
+            break;
+        }
+    } while (true);
+    
+    return std::move(group_clause);
+}
 
 
 std::unique_ptr<Expression> Parser::parse_expression() {
