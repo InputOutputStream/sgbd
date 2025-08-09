@@ -8,27 +8,7 @@
 
 #include "sqlLexer.hpp"    
 #include "clause.hpp"
-#include "ast.hpp"
 #include "statement.hpp"
-
-
-// AST Node types
-enum class ExpressionType {
-    LITERAL,
-    COLUMN_REFERENCE,
-    BINARY_OP,
-    PARENTHESIZED
-};
-
-struct Expression {
-    ExpressionType type;
-    std::string value;
-    std::shared_ptr<Expression> left;
-    std::shared_ptr<Expression> right;
-    
-    Expression(ExpressionType t, std::string v = "") 
-        : type(t), value(std::move(v)), left(nullptr), right(nullptr) {}
-};
 
 
 class Parser {
@@ -47,8 +27,14 @@ class Parser {
             advance();
         }
         std::unique_ptr<Statement> parse_statement();
-        std::unique_ptr<Statement> parse_statements();
-        std::unique_ptr<Clause> parse_clause();  
+
+        std::unique_ptr<Clause> parse_clause();
+        std::unique_ptr<Clause> parse_select_clause();  
+        std::unique_ptr<Clause> parse_from_clause();  
+        std::unique_ptr<Clause> parse_where_clause();  
+        std::unique_ptr<Clause> parse_group_by_clause();  
+        std::unique_ptr<Clause> parse_order_by_clause();  
+
         std::unique_ptr<Expression> parse_expression() ;
         std::unique_ptr<Expression> parse_value_expression() ;
         std::unique_ptr<Expression> parse_binary_expression();

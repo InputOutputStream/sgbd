@@ -4,10 +4,10 @@
 #include <memory>
 #include <unordered_map>
 
-#include "../include/sqlLexer.hpp"
-#include "../include/statement.hpp"
-#include "../include/clause.hpp"
-#include "../include/sqlParser.hpp"
+#include "sqlLexer.hpp"
+#include "statement.hpp"
+#include "clause.hpp"
+#include "sqlParser.hpp"
 
 std::string toupper(const std::string& word) {
     std::string result = word;
@@ -49,9 +49,16 @@ std::unique_ptr<Statement> Parser::parse_statement() {
     }
     
     statement->set_type(it->second);
-    statement->add_clause(std::move(parse_select_clause()));
+
+    // Parse first clause based on statement type
+    if (keyword == "SELECT") {
+        auto select_clause = parse_select_clause();
+        statement->add_clause(std::move(select_clause));
+    }
     
-    // Parse clauses until semicolon
+    // Pour INSERT/UPDATE/DELETE, ne pas parser SELECT clause
+    
+    // Parse remaining clauses...
     while (!match(TokenType::SEMI) && !match(TokenType::END_FILE)) {
         auto clause = parse_clause();
         if (clause) {
@@ -94,7 +101,7 @@ std::unique_ptr<Clause> Parser::parse_select_clause(){
     if (match(TokenType::STAR)) { 
         select_clause->add_column("*");
         advance();
-        return std::move(select_clause);
+        return select_clause;
     }
 
     do {
@@ -111,7 +118,7 @@ std::unique_ptr<Clause> Parser::parse_select_clause(){
         }
     } while (true);
     
-    return std::move(select_clause);
+    return select_clause;
 }
 
 
@@ -145,7 +152,7 @@ std::unique_ptr<Clause> Parser::parse_from_clause() {
         }
     } while (true);
     
-    return std::move(from_clause);
+    return from_clause;
 }
 
 
@@ -155,10 +162,10 @@ std::unique_ptr<Clause> Parser::parse_where_clause() {
     auto expr = parse_binary_expression();
     where_clause->set_condition(std::move(expr));
             
-    return std::move(where_clause);
+    return where_clause;
 }
 
-std::unique_ptr<Clause> Parser::parse_orderBY_clause() {
+std::unique_ptr<Clause> Parser::parse_order_by_clause() {
     advance(); // consume ORDER
     if (match(TokenType::ID) && toupper(current_token->value) == "BY") {
         advance(); // consume BY
@@ -190,11 +197,11 @@ std::unique_ptr<Clause> Parser::parse_orderBY_clause() {
         }
     } while (true);
     
-    return std::move(order_clause);
+    return order_clause;
 }
 
 
-std::unique_ptr<Clause> Parser::parse_group_clause(){
+std::unique_ptr<Clause> Parser::parse_group_by_clause(){
     advance(); // consume GROUP
     if (match(TokenType::ID) && toupper(current_token->value) == "BY") {
         advance(); // consume BY
@@ -216,7 +223,7 @@ std::unique_ptr<Clause> Parser::parse_group_clause(){
         }
     } while (true);
     
-    return std::move(group_clause);
+    return group_clause;
 }
 
 
@@ -224,7 +231,7 @@ std::unique_ptr<Expression> Parser::parse_expression() {
     return parse_binary_expression();
 }
 
-std::shared_ptr<Expression> Parser::parse_value_expression() {
+std::unique_ptr<Expression> Parser::parse_value_expression() {
     if (match(TokenType::LPAREN)) {
         advance();
         auto expr = parse_value_expression();
@@ -234,19 +241,19 @@ std::shared_ptr<Expression> Parser::parse_value_expression() {
         }
         advance();
         
-        auto paren_expr = std::make_shared<Expression>(ExpressionType::PARENTHESIZED);
-        paren_expr->left = expr;
+        auto paren_expr = std::make_unique<Expression>(ExpressionType::PARENTHESIZED);
+        paren_expr->left = std::move(expr);
         return paren_expr;
     }
     
     if (match(TokenType::NUMBER) || match(TokenType::STRING)) {
-        auto literal = std::make_shared<Expression>(ExpressionType::LITERAL, current_token->value);
+        auto literal = std::make_unique<Expression>(ExpressionType::LITERAL, current_token->value);
         advance();
         return literal;
     }
     
     if (match(TokenType::ID)) {
-        auto column = std::make_shared<Expression>(ExpressionType::COLUMN_REFERENCE, current_token->value);
+        auto column = std::make_unique<Expression>(ExpressionType::COLUMN_REFERENCE, current_token->value);
         advance();
         return column;
     }
@@ -254,7 +261,7 @@ std::shared_ptr<Expression> Parser::parse_value_expression() {
     throw std::runtime_error("Expected expression");
 }
 
-std::shared_ptr<Expression> Parser::parse_binary_expression() {
+std::unique_ptr<Expression> Parser::parse_binary_expression() {
     auto left = parse_value_expression();
     
     if (match(TokenType::EQUALS)) {
@@ -262,9 +269,9 @@ std::shared_ptr<Expression> Parser::parse_binary_expression() {
         advance();
         auto right = parse_value_expression();
         
-        auto binary_expr = std::make_shared<Expression>(ExpressionType::BINARY_OP, op);
-        binary_expr->left = left;
-        binary_expr->right = right;
+        auto binary_expr = std::make_unique<Expression>(ExpressionType::BINARY_OP, op);
+        binary_expr->left = std::move(left); 
+        binary_expr->right = std::move(right);
         return binary_expr;
     }
     
