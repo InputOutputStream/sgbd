@@ -12,6 +12,7 @@ class FromClause;
 class WhereClause;
 class OrderByClause;
 class LimitClause;
+class CreateClause;
 class SelectClause;
 class GroupClause;
 class Clause;
@@ -22,7 +23,7 @@ class ASTNode {
 public:
     virtual ~ASTNode() = default;
     virtual void accept(ASTVisitor& visitor) = 0;
-    virtual std::string to_string() const = 0;
+    virtual std::string to_string() = 0;
 };
 
 class ASTVisitor {
@@ -35,6 +36,7 @@ public:
     virtual void visit(WhereClause& where_clause) = 0;
     virtual void visit(OrderByClause& order_by_clause) = 0;
     virtual void visit(LimitClause& limit_clause) = 0;
+    virtual void visit(CreateClause& create_clause) = 0;
     virtual void visit(SelectClause& select_clause) = 0;
     virtual void visit(GroupClause& group_clause) = 0;
 };

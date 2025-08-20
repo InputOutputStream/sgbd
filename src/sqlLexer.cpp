@@ -66,6 +66,10 @@ std::unique_ptr<Token> Lexer::get_next_token() {
         }
 
         if (std::isalpha(current_char) || current_char == '_') {
+            /**
+             * this is suppose to collect all tokens different from white spaces whether sql clauses or table names, it will be to the parser to decide
+             * what to do with them.
+             */
             return collect_id();
         }
         

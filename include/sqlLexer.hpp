@@ -22,8 +22,13 @@ enum class TokenType {
     RSBRACE,
     STAR,
     QUOTE,
+
+    LITERAL,
+    COLUMN_REFERENCE,
+    
     END_FILE
 };
+
 
 struct Token {
     TokenType type;

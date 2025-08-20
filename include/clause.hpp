@@ -12,7 +12,7 @@
 
 
 enum class ClauseType {
-    SELECT, FROM, WHERE, GROUP_BY, HAVING, ORDER_BY
+   CREATE, SELECT, FROM, WHERE, GROUP_BY, HAVING, ORDER_BY, LIMIT, JOIN, EXPR
 };
 
 
@@ -20,34 +20,26 @@ enum class ClauseType {
 enum class ExpressionType {
     LITERAL,
     COLUMN_REFERENCE,
-    BINARY_OP,
-    PARENTHESIZED
-};
-
-struct Expression {
-    ExpressionType type;
-    std::string value;
-    std::shared_ptr<Expression> left;
-    std::shared_ptr<Expression> right;
-    
-    Expression(ExpressionType t, std::string v = "") 
-        : type(t), value(std::move(v)), left(nullptr), right(nullptr) {}
-    std::string to_string(){return value;}
+    BINARY_OP,      // For AND, OR, =, <, >, etc.
+    UNARY_OP,       // For NOT
+    PARENTHESIZED   // For grouped expressions
 };
 
 class Clause: public ASTNode{
     ClauseType type;
-    std::vector<std::unique_ptr<Expression>> expression_list;
-    std::vector<std::string> arguments;
 
     public:
         Clause(ClauseType t):type(t){}
 
-        void accept(ASTVisitor& visitor) override {
+        void accept(ASTVisitor& visitor) {
             visitor.visit(*this);
         }
-        std::string to_string() { 
+        
+        std::string to_string() override { 
             switch(type){
+                case ClauseType::CREATE:
+                    return "CREATE";
+                    break;
                 case ClauseType::SELECT:
                     return "SELECT";
                     break;
@@ -66,6 +58,15 @@ class Clause: public ASTNode{
                 case ClauseType::ORDER_BY:
                     return "ORDER_BY";
                     break;
+                case ClauseType::LIMIT:
+                    return "LIMIT";
+                    break;
+                case ClauseType::JOIN:
+                    return "JOIN";
+                    break;
+                case ClauseType::EXPR:
+                    return "EXPRESSION";
+                    break;
             }   
             return "UNK";
         }
@@ -73,27 +74,63 @@ class Clause: public ASTNode{
 };
 
 
+
+struct Expression : Clause {
+    ExpressionType type;
+    std::string value;
+    std::unique_ptr<Expression> left;
+    std::unique_ptr<Expression> right;
+    
+    Expression(ExpressionType t, std::string v = "") 
+        :Clause(ClauseType::EXPR), type(t), value(std::move(v)), left(nullptr), right(nullptr) {
+        }
+    std::string to_string(){return value;}
+};
+
+
 /**
  * <select_list> ::= 
     * 
   | <select_sublist> [ { , <select_sublist> }... ]
-*/
+  */
+
+class CreateClause : public Clause {
+    
+    std::vector<std::string> items;  // Uniformized: was 'columns'
+    
+    public:
+        CreateClause() : Clause(ClauseType::CREATE) {}
+
+        void add_item(const std::string& item) {  // Uniformized: was 'add_column'
+            items.push_back(item);
+        }
+        
+        std::string to_string() override {
+            std::string result = "CREATE ";
+            for (size_t i = 0; i < items.size(); ++i) {
+                if (i > 0) result += ", ";
+                result += items[i];
+            }
+            return result;
+        }
+};
+
 class SelectClause : public Clause {
     
-    std::vector<std::string> columns;
+    std::vector<std::string> items;  // Uniformized: was 'columns'
     
     public:
         SelectClause() : Clause(ClauseType::SELECT) {}
 
-        void add_column(const std::string& col) {
-            columns.push_back(col);
+        void add_item(const std::string& item) {  // Uniformized: was 'add_column'
+            items.push_back(item);
         }
         
-        std::string to_string() const override {
+        std::string to_string() override {
             std::string result = "SELECT ";
-            for (size_t i = 0; i < columns.size(); ++i) {
+            for (size_t i = 0; i < items.size(); ++i) {
                 if (i > 0) result += ", ";
-                result += columns[i];
+                result += items[i];
             }
             return result;
         }
@@ -106,26 +143,29 @@ class SelectClause : public Clause {
  */
 class GroupClause : public Clause {
 
-    std::vector<std::string> reference_list;
+    std::vector<std::string> items;  // Uniformized: was 'reference_list'
     
     public:
         GroupClause() : Clause(ClauseType::GROUP_BY) {}
 
-        void add_reference(const std::string& col) {
-            reference_list.push_back(col);
+        void add_item(const std::string& item) {  // Uniformized: was 'add_reference'
+            items.push_back(item);
         }
         
-        std::string to_string() const override {
+        std::string to_string() override {
             std::string result = "GROUP BY ";
-            for (size_t i = 0; i < reference_list.size(); ++i) {  
+            for (size_t i = 0; i < items.size(); ++i) {  
                 if (i > 0) result += ", ";
-                result += reference_list[i];  
+                result += items[i];  
             }
             return result;
         }
 };
 
+class CreateList // Todo impl
+{
 
+};
 
 /**
  * <from_clause> ::= FROM <table_reference_list>
@@ -135,22 +175,22 @@ class GroupClause : public Clause {
         | ( <table_reference> )
  */
 class FromClause : public Clause {
-    std::vector<std::string> table_names;
-    std::vector<std::string> aliases;
+    std::vector<std::string> items;    // Uniformized: was 'table_names'
+    std::vector<std::string> aliases;  // Kept as is since it's auxiliary data
 
     public:
         FromClause() : Clause(ClauseType::FROM) {}
 
-        void add_table(const std::string& name, const std::string& alias = "") {
-            table_names.push_back(name);
+        void add_item(const std::string& item, const std::string& alias = "") {  // Uniformized: was 'add_table'
+            items.push_back(item);
             aliases.push_back(alias);
         }
 
-        std::string to_string() const override {
+        std::string to_string() override {
             std::string result = "FROM ";
-            for (size_t i = 0; i < table_names.size(); ++i) {
+            for (size_t i = 0; i < items.size(); ++i) {
                 if (i > 0) result += ", ";
-                result += table_names[i];
+                result += items[i];
                 if (!aliases[i].empty()) {
                     result += " AS " + aliases[i];
                 }
@@ -171,16 +211,16 @@ class FromClause : public Clause {
   | NOT <search_condition>
  */
 class WhereClause : public Clause {
-    std::shared_ptr<Expression> condition;
+    std::unique_ptr<Expression> condition;  // Special case: single expression instead of list
 
     public:
         WhereClause() : Clause(ClauseType::WHERE) {}
 
-        void set_condition(std::shared_ptr<Expression> cond) {
+        void set_condition(std::unique_ptr<Expression> cond) {
             condition = std::move(cond);
         }
         
-        std::string to_string() const override {
+        std::string to_string() override {
             return "WHERE " + (condition ? condition->to_string() : "");
         }
         
@@ -197,22 +237,22 @@ class WhereClause : public Clause {
  */
 class OrderByClause : public Clause {
 
-    std::vector<std::string> columns;
-    std::vector<std::string> directions; // ASC/DESC
+    std::vector<std::string> items;      // Uniformized: was 'columns'
+    std::vector<std::string> directions; // Kept as is since it's auxiliary data (ASC/DESC)
     
     public:
         OrderByClause() : Clause(ClauseType::ORDER_BY) {}
 
-        void add_sort_column(const std::string& col, const std::string& dir = "ASC") {
-            columns.push_back(col);
+        void add_item(const std::string& item, const std::string& dir = "ASC") {  // Uniformized: was 'add_sort_column'
+            items.push_back(item);
             directions.push_back(dir);
         }
         
-        std::string to_string() const override {
+        std::string to_string() override {
             std::string result = "ORDER BY ";
-            for (size_t i = 0; i < columns.size(); ++i) {
+            for (size_t i = 0; i < items.size(); ++i) {
                 if (i > 0) result += ", ";
-                result += columns[i] + " " + directions[i];
+                result += items[i] + " " + directions[i];
             }
             return result;
         }
@@ -228,7 +268,22 @@ class OrderByClause : public Clause {
 -- Or vendor-specific variants like TOP, ROWNUM
  * * */
 class LimitClause : public Clause{
+    std::vector<std::string> items;  // Uniformized: for consistency
 
+    public:
+        LimitClause() : Clause(ClauseType::LIMIT) {}
+
+        void add_item(const std::string& item) {
+            items.push_back(item);
+        }
+        
+        std::string to_string() override {
+            std::string result = "LIMIT ";
+            if (!items.empty()) {
+                result += items[0];  // LIMIT typically takes one value
+            }
+            return result;
+        }
 };
 
 
@@ -240,7 +295,23 @@ class LimitClause : public Clause{
   | <table_reference> NATURAL <join_type> <table_reference>
  */
 class JoinClause : public Clause{
+    std::vector<std::string> items;  // Uniformized: for consistency
 
+    public:
+        JoinClause() : Clause(ClauseType::JOIN) {}
+
+        void add_item(const std::string& item) {
+            items.push_back(item);
+        }
+        
+        std::string to_string() override {
+            std::string result = "JOIN ";
+            for (size_t i = 0; i < items.size(); ++i) {
+                if (i > 0) result += " ";
+                result += items[i];
+            }
+            return result;
+        }
 };
 
 
@@ -249,8 +320,19 @@ class JoinClause : public Clause{
 /**
  * <having_clause> ::= HAVING <search_condition>
  */
-struct HavingClause : public Clause {
+class HavingClause : public Clause {
+    std::unique_ptr<Expression> condition;  // Special case: like WHERE, single expression
 
+    public:
+        HavingClause() : Clause(ClauseType::HAVING) {}
+
+        void set_condition(std::unique_ptr<Expression> cond) {
+            condition = std::move(cond);
+        }
+        
+        std::string to_string() override {
+            return "HAVING " + (condition ? condition->to_string() : "");
+        }
 };
 
 

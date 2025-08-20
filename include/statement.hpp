@@ -5,6 +5,7 @@
 #include <iostream>
 #include <string>
 #include <memory>
+#include <set>
 
 #include "sqlLexer.hpp"
 #include "clause.hpp"
@@ -12,19 +13,20 @@
 
 
 enum class StatementType{
-    SELECT, INSERT, UPDATE, DELETE, CREATE
+    SELECT, INSERT, UPDATE, DELETE, CREATE, UNKNOWN
 };
+
 
 class Statement : public ASTNode {
     StatementType type;
     std::vector<std::unique_ptr<Clause>> clauses;
-    
+
     public:  
         void accept(ASTVisitor& visitor) override {
             visitor.visit(*this);
         }
         
-        std::string to_string() const override {
+        std::string to_string() override {
             std::string result;
             for (const auto& clause : clauses) {
                 result += clause->to_string() + " ";
