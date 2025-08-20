@@ -5,7 +5,7 @@
 
 int main(){
 
-    std::string text = "Select age, sex from Student, Teachers where name = \"Frank\" and age = 34 group by Name;";
+    std::string text = "Select age, sex from Student, Teachers where name = \"Frank\" and age = 34 group by Name, Class;";
     Lexer lex(text);
     std::shared_ptr<Token> type;
 

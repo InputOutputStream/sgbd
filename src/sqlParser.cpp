@@ -139,7 +139,11 @@ void Parser::parse_comma_separated_list(ClauseType* clause,
     set_parsing_context(ParsingContext::CLAUSE_LEVEL);
     
     do {
-        expect_token(TokenType::ID, "Expected " + item_name);
+        if(!(match(TokenType::ID) || match(TokenType::NUMBER)))
+        {
+            throw std::runtime_error(" Expected " + item_name);
+        }
+        
         std::string item = current_token->value;
         advance();
         add_item(clause, item);
