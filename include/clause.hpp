@@ -5,7 +5,7 @@
 #include <iostream>
 #include <string>
 #include <memory>
-
+#include <unordered_map>
 
 #include "sqlLexer.hpp"
 #include "ast.hpp"
@@ -93,24 +93,49 @@ struct Expression : Clause {
     * 
   | <select_sublist> [ { , <select_sublist> }... ]
   */
-
 class CreateClause : public Clause {
-    
-    std::vector<std::string> items;  // Uniformized: was 'columns'
+    std::string name;  
+    bool is_table = true;
+    std::unordered_map<std::string, std::vector<std::string>> items;  
     
     public:
         CreateClause() : Clause(ClauseType::CREATE) {}
+        
+        void set_name(const std::string& name) {
+            this->name = name;
+        }
 
-        void add_item(const std::string& item) {  // Uniformized: was 'add_column'
-            items.push_back(item);
+        void set_is_table(bool value) {
+            is_table = value;
+        }
+
+        void add_item(const std::string& item_name, const std::vector<std::string>& item_attributes) {
+            items[item_name] = item_attributes; // This handles both empty and non-empty vectors
         }
         
         std::string to_string() override {
             std::string result = "CREATE ";
-            for (size_t i = 0; i < items.size(); ++i) {
-                if (i > 0) result += ", ";
-                result += items[i];
+            if(is_table) result += "TABLE ";
+            else result += "DATABASE ";
+            result += name;
+            
+            // Only add parentheses and columns if it's a table with columns
+            if (is_table && !items.empty()) {
+                result += " (";
+                bool first = true;
+                for (const auto& kv : items) {
+                    if (!first) result += ", ";
+                    result += kv.first;
+                    
+                    // Add all attributes for this column
+                    for (const auto& attr : kv.second) {
+                        result += " " + attr;
+                    }
+                    first = false;
+                }
+                result += ")";
             }
+            
             return result;
         }
 };
@@ -118,19 +143,31 @@ class CreateClause : public Clause {
 class SelectClause : public Clause {
     
     std::vector<std::string> items;  // Uniformized: was 'columns'
-    
+    std::vector<std::string> aliases;  
+
     public:
         SelectClause() : Clause(ClauseType::SELECT) {}
+        bool is_distinct = false; // Added for DISTINCT support
 
-        void add_item(const std::string& item) {  // Uniformized: was 'add_column'
+        void add_item(const std::string& item, const std::string& alias = "") {  // Uniformized: was 'add_column'
             items.push_back(item);
+            aliases.push_back(alias);
         }
         
+        void set_distinct(bool value){
+            is_distinct = value;
+        }
+
         std::string to_string() override {
             std::string result = "SELECT ";
+            if (is_distinct) result += "DISTINCT ";
+
             for (size_t i = 0; i < items.size(); ++i) {
                 if (i > 0) result += ", ";
                 result += items[i];
+                if (!aliases[i].empty()) {
+                    result += " AS " + aliases[i];
+                }
             }
             return result;
         }

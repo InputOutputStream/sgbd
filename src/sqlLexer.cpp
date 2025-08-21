@@ -58,6 +58,10 @@ char Lexer::peek_next() const {
     return '\0';
 }
 
+bool Lexer::is_at_end() const{
+    return position >= content.size() || current_char == '\0';
+}
+
 std::unique_ptr<Token> Lexer::get_next_token() {
     while (current_char != '\0' && position < content.size()) {
         if (std::isspace(current_char)) {
@@ -79,6 +83,11 @@ std::unique_ptr<Token> Lexer::get_next_token() {
         
         if (current_char == '"') {
             return collect_string();
+        }
+
+        if(is_at_end())
+        {
+            return std::make_unique<Token>(TokenType::END_FILE);
         }
 
         switch (current_char) {
@@ -104,6 +113,34 @@ std::unique_ptr<Token> Lexer::get_next_token() {
                 return advance_with_token(TokenType::LSBRACE, "[");
             case ']':
                 return advance_with_token(TokenType::RSBRACE, "]");
+
+            // Handle comparison operators
+            case '<':
+                if (peek_next() == '=') {
+                    advance(); // consume '='       
+                    return advance_with_token(TokenType::LESS_EQUAL, "<=");
+                } else if (peek_next() == '>') {
+                    advance(); // consume '>'       
+                    return advance_with_token(TokenType::NOT_EQUAL, "<>");
+                } else {
+                    return advance_with_token(TokenType::LESS_THAN, "<");       
+                }
+            case '>':   
+                if (peek_next() == '=') {
+                    advance(); // consume '='       
+                    return advance_with_token(TokenType::GREATER_EQUAL, ">=");
+                } else {
+                    return advance_with_token(TokenType::GREATER_THAN, ">");       
+                }
+            case '!':
+                if (peek_next() == '=') {
+                    advance(); // consume '='       
+                    return advance_with_token(TokenType::NOT_EQUAL, "!=");
+                } else {
+                    std::cerr << "ERROR: Unexpected character '!' at position " << position << "\n";
+                    advance();
+                    return nullptr; // Invalid token
+                }
             default:
                 advance();
                 continue;

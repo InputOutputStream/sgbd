@@ -36,9 +36,11 @@ namespace Keywords {
         // Clause Keywords
         "FROM", "WHERE", "ORDER", "GROUP", "HAVING", "LIMIT",
         "INTO", "VALUES", "SET", "RETURNING",
+        // Expression Keywords - ADD THESE:
+        "AND", "OR", "NOT", "LIKE", "IN", "BETWEEN", "IS", "NULL",
+        "DISTINCT", "AS",
         // Other Keywords
-        "BY", "AS", "AND", "OR", "NOT", "ASC", "DESC", "LIKE", "BETWEEN", "IN", 
-    };
+        "BY", "ASC", "DESC"};
     
     const std::set<std::string> STATEMENT_KEYWORDS = {
         "CREATE", "SELECT", "INSERT", "UPDATE", "DELETE", "DROP", "ALTER"
@@ -188,10 +190,7 @@ std::unique_ptr<Statement> Parser::parse_statement() {
     // Parse additional clauses at statement level
     set_parsing_context(ParsingContext::STATEMENT_LEVEL);
     
-    while (!should_stop_parsing()) {
-        // std::cout << "Current token in main loop: " << 
-            // (current_token ? current_token->value : "NULL") << std::endl;
-            
+    while (!should_stop_parsing()) {      
         auto clause = parse_clause();
         if (clause) {
             statement->add_clause(std::move(clause));
@@ -247,7 +246,7 @@ std::unique_ptr<Clause> Parser::parse_clause() {
     switch (current_statement_type) {
         case StatementType::CREATE:
             if (clause_keyword == "TABLE")    return parse_table_definition_clause();
-            if (clause_keyword == "DATABASE") return parse_database_definition_clause();
+            if (clause_keyword == "DATABASE") return parse_table_definition_clause();
             break;
 
         case StatementType::SELECT:
@@ -277,7 +276,7 @@ std::unique_ptr<Clause> Parser::parse_clause() {
     }
 
     // If we reach here, it's an unrecognized clause keyword
-    std::cout << "Unrecognized clause keyword: " << clause_keyword << std::endl;
+    std::cerr << "Unrecognized clause keyword: " << clause_keyword << std::endl;
     return nullptr;
 }
 
@@ -287,13 +286,88 @@ std::unique_ptr<Clause> Parser::parse_clause() {
 
 std::unique_ptr<Clause> Parser::parse_create_clause() {
     advance(); // consume CREATE
+    set_parsing_context(ParsingContext::CLAUSE_LEVEL);
     auto create_clause = std::make_unique<CreateClause>();
 
     expect_token(TokenType::ID, "Expected object type after CREATE");
-    std::string object_type = current_token->value;
+    std::string object_type = to_uppercase(current_token->value);
     advance();
-    create_clause->add_item(object_type);
 
+    if (object_type == "TABLE") {
+        create_clause->set_is_table(true);
+    }
+    else if (object_type == "DATABASE") {
+        create_clause->set_is_table(false);
+    } else {
+        throw std::runtime_error("Unsupported CREATE type: " + object_type);
+    }
+
+    expect_token(TokenType::ID, "Expected name after CREATE " + object_type);
+    create_clause->set_name(current_token->value);
+    advance();
+
+    // For DATABASE, we're done (no column definitions)
+    if (object_type == "DATABASE") {
+        set_parsing_context(ParsingContext::STATEMENT_LEVEL);
+        return create_clause;
+    }
+
+    // For TABLE, check if there are column definitions
+    if (!match(TokenType::LPAREN)) { 
+        set_parsing_context(ParsingContext::STATEMENT_LEVEL);
+        return create_clause; // Table without column definitions
+    }
+
+    // Parse column definitions
+    advance(); // consume '('
+    
+    do {
+        std::string column;
+        std::vector<std::string> col_attributes;
+        
+        expect_token(TokenType::ID, "Expected column name");
+        if (!is_sql_keyword()) {
+            column = current_token->value;
+            advance();
+        } else {
+            throw std::runtime_error("Column name cannot be a SQL keyword: " + current_token->value);
+        }
+
+        // Parse column attributes (data type, constraints, etc.)
+        while (!match(TokenType::COMMA) && !match(TokenType::RPAREN)) {
+            if (match(TokenType::ID)) {
+                col_attributes.push_back(current_token->value);
+                advance();
+            } else if (match(TokenType::LPAREN)) {
+                // Handle data type with size: VARCHAR(255)
+                advance(); // consume '('
+                if (match(TokenType::NUMBER)) {
+                    col_attributes.back() += "(" + current_token->value + ")";
+                    advance();
+                }
+                expect_token(TokenType::RPAREN, "Expected ')' after data type size");
+                advance();
+            } else {
+                break;
+            }
+        }
+        
+        // Add column and its attributes
+        create_clause->add_item(column, col_attributes);
+        
+        if (match(TokenType::COMMA)) {
+            advance();
+            continue;
+        } else if (match(TokenType::RPAREN)) {
+            advance(); // consume ')'
+            break;
+        } else {
+            throw std::runtime_error("Expected ',' or ')' in column definition");
+        }
+        
+    } while (true);
+    
+    set_parsing_context(ParsingContext::STATEMENT_LEVEL);
     return create_clause;
 }
 
@@ -303,6 +377,12 @@ std::unique_ptr<Clause> Parser::parse_select_clause() {
     
     auto select_clause = std::make_unique<SelectClause>();
     
+    // Handle DISTINCT keyword
+    if (match_keyword("DISTINCT")) {
+        advance();
+        select_clause->set_distinct(true);
+    }
+
     if (match(TokenType::STAR)) { 
         select_clause->add_item("*");
         advance();
@@ -314,7 +394,20 @@ std::unique_ptr<Clause> Parser::parse_select_clause() {
         expect_token(TokenType::ID, "Expected column name in SELECT clause");
         std::string column = current_token->value;
         advance();
-        select_clause->add_item(column);
+
+        std::string alias = "";
+        if (match_keyword("AS")) {
+            advance(); // consume AS
+            expect_token(TokenType::ID, "Expected alias after AS");
+            alias = current_token->value;
+            advance();
+        }else if (match(TokenType::ID) && !is_sql_keyword()) { // Check if next token is not a keyword
+            alias = current_token->value; // handle alias without AS
+            advance();
+        } 
+            
+        // Add column and alias to the select clause
+        select_clause->add_item(column, alias);
         
         if (match(TokenType::COMMA)) {
             advance();
@@ -426,27 +519,57 @@ std::unique_ptr<Clause> Parser::parse_group_by_clause() {
 // ============================================================================
 
 std::unique_ptr<Clause> Parser::parse_table_definition_clause() {
-    // TODO: Implement table definition parsing
-    advance(); // consume TABLE for now
-    return nullptr;
+    advance(); // consume TABLE
+    set_parsing_context(ParsingContext::CLAUSE_LEVEL);
+    
+    auto create_clause = std::make_unique<CreateClause>();
+    
+    expect_token(TokenType::ID, "Expected table name in create clause");
+    std::string table_name = current_token->value;
+    advance();
+    create_clause->add_item(table_name, std::vector<std::string>{});
+        
+    do {
+            if(match(TokenType::LPAREN)){
+                advance(); // consume LPAREN
+            } else {
+                break;
+            }    
+
+        if (match(TokenType::COMMA)) {
+            advance();
+            continue;
+        } else {
+            break;
+        }
+    } while (!should_stop_parsing_parameters());
+
+    set_parsing_context(ParsingContext::STATEMENT_LEVEL);
+    return create_clause;
 }
 
-std::unique_ptr<Clause> Parser::parse_database_definition_clause() {
-    // TODO: Implement database definition parsing  
-    advance(); // consume DATABASE for now
-    return nullptr;
-}
+// std::unique_ptr<Clause> Parser::parse_database_definition_clause() {
+//     // TODO: Implement database definition parsing  
+//     advance(); // consume DATABASE for now
+//     return nullptr;
+// }
 
 std::unique_ptr<Clause> Parser::parse_having_clause() {
-    // TODO: Implement HAVING clause parsing (similar to WHERE)
-    advance(); // consume HAVING for now
-    return nullptr;
+    advance(); // consume HAVING
+    auto having_clause = std::make_unique<HavingClause>();
+    auto expr = parse_expression(); // Use full expression parser
+    having_clause->set_condition(std::move(expr));
+    return having_clause;
 }
 
 std::unique_ptr<Clause> Parser::parse_limit_clause() {
-    // TODO: Implement LIMIT clause parsing
-    advance(); // consume LIMIT for now
-    return nullptr;
+    advance(); // consume LIMIT
+    auto limit_clause = std::make_unique<LimitClause>();
+    expect_token(TokenType::NUMBER, "Expected number after LIMIT");
+    std::string limit_value = current_token->value;
+    advance();
+    limit_clause->add_item(limit_value);
+    return limit_clause;
 }
 
 std::unique_ptr<Clause> Parser::parse_into_clause() {
@@ -535,16 +658,83 @@ std::unique_ptr<Expression> Parser::parse_comparison_expression() {
     // Handle comparison operators: =, <, >, <=, >=, <>, LIKE, etc.
     if (match(TokenType::EQUALS) || match_keyword("LIKE") || 
         match_keyword("IN") || match_keyword("BETWEEN")) {
+
         std::string op = current_token->value;
+        if (match(TokenType::ID)) {
+            op = to_uppercase(op);
+        }
+
         advance();
+
+        // Handle IS NULL / IS NOT NULL
+        if (op == "IS") {
+            if (match_keyword("NOT")) {
+                advance();
+                expect_keyword("NULL", "Expected NULL after IS NOT");
+                op = "IS NOT NULL";
+                advance();
+                // No right operand for IS NULL/IS NOT NULL
+                auto unary_expr = std::make_unique<Expression>(ExpressionType::UNARY_OP, op);
+                unary_expr->left = std::move(left);
+                return unary_expr;
+            } else {
+                expect_keyword("NULL", "Expected NULL after IS");
+                op = "IS NULL";
+                advance();
+                auto unary_expr = std::make_unique<Expression>(ExpressionType::UNARY_OP, op);
+                unary_expr->left = std::move(left);
+                return unary_expr;
+            }
+        }
         auto right = parse_primary_expression();
         
         auto binary_expr = std::make_unique<Expression>(ExpressionType::BINARY_OP, op);
         binary_expr->left = std::move(left);
         binary_expr->right = std::move(right);
         return binary_expr;
-    }
+    }else if(match(TokenType::GREATER_EQUAL)){
+        advance(); // consume GREATER_EQUAL
+        auto right = parse_primary_expression();
+        
+        auto binary_expr = std::make_unique<Expression>(ExpressionType::BINARY_OP, ">=");
+        binary_expr->left = std::move(left);
+        binary_expr->right = std::move(right);
+        return binary_expr;
+    }else if(match(TokenType::LESS_EQUAL)){
+         advance(); // consume LESS_EQUAL
+        auto right = parse_primary_expression();
+        
+        auto binary_expr = std::make_unique<Expression>(ExpressionType::BINARY_OP, "<=");
+        binary_expr->left = std::move(left);
+        binary_expr->right = std::move(right);
+        return binary_expr;
+    }else if(match(TokenType::GREATER_THAN)){
+         advance(); // consume GREATER_THAN
+        auto right = parse_primary_expression();
+        
+        auto binary_expr = std::make_unique<Expression>(ExpressionType::BINARY_OP, ">");
+        binary_expr->left = std::move(left);
+        binary_expr->right = std::move(right);
+        return binary_expr;
+    }else if(match(TokenType::LESS_THAN)){
+        advance(); // consume LESS_THAN
+        auto right = parse_primary_expression();
+        
+        auto binary_expr = std::make_unique<Expression>(ExpressionType::BINARY_OP, "<");
+        binary_expr->left = std::move(left);
+        binary_expr->right = std::move(right);
+        return binary_expr; 
+    }else if(match(TokenType::NOT_EQUAL)){
+        advance(); // consume NOT_EQUAL
+        auto right = parse_primary_expression();
+        
+        auto binary_expr = std::make_unique<Expression>(ExpressionType::BINARY_OP, "<>");
+        binary_expr->left = std::move(left);
+        binary_expr->right = std::move(right);
+        return binary_expr;
+    } 
     
+    // If no comparison operator, return the left operand as is
     return left;
 }
 
@@ -566,9 +756,15 @@ std::unique_ptr<Expression> Parser::parse_primary_expression() {
     }
     
     if (match(TokenType::ID)) {
-        auto column = std::make_unique<Expression>(ExpressionType::COLUMN_REFERENCE, current_token->value);
+        std::string value = current_token->value;
         advance();
-        return column;
+        
+        // Check for SQL keywords used as values (like NULL)
+        if (to_uppercase(value) == "NULL") {
+            return std::make_unique<Expression>(ExpressionType::LITERAL, "NULL");
+        }
+
+        return std::make_unique<Expression>(ExpressionType::COLUMN_REFERENCE, current_token->value);
     }
     
     throw std::runtime_error("Expected expression");

@@ -1,7 +1,6 @@
 #ifndef SQL_LEXER_H
 #define SQL_LEXER_H
 
-#include "definitions.hpp"
 #include <string>
 #include <vector>
 #include <memory>
@@ -9,22 +8,31 @@
 
 enum class TokenType {
     ID,
+    NUMBER,
     EQUALS,
     STRING,
     SEMI,
     COMMA,
+
     LPAREN,
     RPAREN,
     LBRACE,
-    NUMBER,
     RBRACE,
     LSBRACE,
     RSBRACE,
+    
     STAR,
     QUOTE,
 
     LITERAL,
     COLUMN_REFERENCE,
+
+    // Add these comparison operators:
+    LESS_THAN,      // <
+    GREATER_THAN,   // >  
+    LESS_EQUAL,     // <=
+    GREATER_EQUAL,  // >=
+    NOT_EQUAL,      // <> or !=
     
     END_FILE
 };

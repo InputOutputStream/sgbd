@@ -1,0 +1,8 @@
+#ifndef STORAGE_ENGINE
+#define STORAGE_ENGINE
+
+
+
+
+
+#endif // !STORAGE_ENGINE
