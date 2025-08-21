@@ -5,7 +5,15 @@
 
 int main(){
 
-    std::string text = "Select age, sex from Student, Teachers where name = \"Frank\" and age = 34 group by Name, Class;";
+
+    /**
+     * Select age, sex from Student, Teachers where name = \"Frank\" and age = 34 group by Name, Class;
+     * CREATE DATABASE testdb;
+CREATE TABLE users;
+CREATE TABLE users (id INT, name VARCHAR(255));
+     */
+
+    std::string text = "Select age_of_student as age from Student, Teachers Having 1;";
     Lexer lex(text);
     std::shared_ptr<Token> type;
 
